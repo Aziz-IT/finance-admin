@@ -1,0 +1,481 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Finance admin · لوحة المالية</title>
+<style>
+  :root { --side:#111827; --side-text:#cbd5e1; --bg:#f1f5f9; --card:#fff; --text:#0f172a; --muted:#64748b; --line:#e2e8f0; --accent:#2563eb; --ok:#16a34a; --warn:#d97706; --danger:#dc2626; --hover:#f8fafc; }
+  @media (prefers-color-scheme: dark) {
+    :root { --bg:#0b1020; --card:#111827; --text:#e2e8f0; --muted:#94a3b8; --line:#1f2937; --hover:#1a2335; --accent:#60a5fa; --ok:#4ade80; --warn:#fbbf24; --danger:#f87171; }
+  }
+  * { box-sizing:border-box; }
+  body { margin:0; font-family:system-ui,-apple-system,Segoe UI,Roboto,"Noto Naskh Arabic",sans-serif; background:var(--bg); color:var(--text); display:flex; min-height:100vh; }
+  input,select,textarea,button { font:inherit; color:inherit; }
+  input,select,textarea { background:var(--bg); border:1px solid var(--line); border-radius:6px; padding:8px 10px; width:100%; }
+  textarea { resize:vertical; min-height:64px; }
+  button { background:var(--card); border:1px solid var(--line); border-radius:6px; padding:8px 12px; cursor:pointer; }
+  button:hover { border-color:var(--accent); }
+  button.primary { background:var(--accent); border-color:var(--accent); color:#fff; }
+  button.danger { color:var(--danger); }
+  button.small { padding:4px 8px; font-size:13px; }
+
+  /* Sidebar */
+  aside { width:230px; background:var(--side); color:var(--side-text); padding:20px 14px; position:sticky; top:0; height:100vh; display:flex; flex-direction:column; gap:4px; flex-shrink:0; }
+  .brand { color:#fff; font-weight:700; font-size:17px; padding:4px 10px 18px; }
+  .nav { display:block; width:100%; text-align:start; background:none; border:none; color:var(--side-text); padding:9px 12px; border-radius:6px; }
+  .nav:hover { background:#1f2937; border-color:transparent; }
+  .nav.on { background:#1e3a8a; color:#fff; }
+  .side-foot { margin-top:auto; font-size:12px; color:#64748b; padding:10px; }
+
+  main { flex:1; min-width:0; }
+  header.top { display:flex; justify-content:space-between; align-items:center; gap:12px; padding:16px 28px; background:var(--card); border-bottom:1px solid var(--line); flex-wrap:wrap; }
+  header.top h1 { font-size:20px; margin:0; }
+  .content { padding:24px 28px; max-width:1200px; }
+  h2 { font-size:16px; margin:0; }
+  .sub { color:var(--muted); font-size:13px; }
+  .muted { color:var(--muted); font-size:13px; }
+  .over { color:var(--danger); }
+  .good { color:var(--ok); }
+
+  .cards { display:grid; grid-template-columns:repeat(auto-fit,minmax(190px,1fr)); gap:14px; margin-bottom:20px; }
+  .card { background:var(--card); border:1px solid var(--line); border-radius:12px; padding:16px 18px; }
+  .card .label { color:var(--muted); font-size:13px; }
+  .card .value { font-size:24px; font-weight:650; margin-top:6px; font-variant-numeric:tabular-nums; }
+  .card .hint { color:var(--muted); font-size:12px; margin-top:4px; }
+  .grid2 { display:grid; grid-template-columns:1.6fr 1fr; gap:14px; margin-bottom:20px; }
+  @media (max-width:900px){ .grid2{grid-template-columns:1fr;} }
+
+  .panel { background:var(--card); border:1px solid var(--line); border-radius:12px; overflow:hidden; margin-bottom:20px; }
+  .panel-head { display:flex; justify-content:space-between; align-items:center; gap:10px; padding:14px 18px; border-bottom:1px solid var(--line); flex-wrap:wrap; }
+  .panel-body { padding:16px 18px; }
+  .table-wrap { overflow-x:auto; }
+  table { width:100%; border-collapse:collapse; }
+  th,td { text-align:start; padding:10px 14px; border-bottom:1px solid var(--line); font-size:14px; white-space:nowrap; }
+  th { color:var(--muted); font-weight:500; font-size:12px; text-transform:uppercase; letter-spacing:.03em; background:var(--hover); }
+  tbody tr:hover { background:var(--hover); }
+  td.num,th.num { text-align:end; font-variant-numeric:tabular-nums; }
+  .actions { display:flex; gap:6px; justify-content:flex-end; }
+  .badge { display:inline-block; padding:2px 9px; border-radius:999px; font-size:12px; border:1px solid var(--line); }
+  .s-active { color:var(--ok); border-color:var(--ok); }
+  .s-paused { color:var(--warn); border-color:var(--warn); }
+  .s-archived { color:var(--muted); }
+  .empty { padding:28px; text-align:center; color:var(--muted); font-size:14px; }
+  .alert { border-radius:10px; padding:12px 14px; font-size:14px; margin-bottom:16px; border:1px solid; }
+  .alert.warn { border-color:var(--warn); color:var(--warn); background:rgba(217,119,6,.08); }
+  .alert.bad { border-color:var(--danger); color:var(--danger); background:rgba(220,38,38,.08); }
+  .alert.ok { border-color:var(--ok); color:var(--ok); background:rgba(22,163,74,.08); }
+
+  /* Chart */
+  .chart { width:100%; height:auto; }
+  .chart .axis { stroke:var(--line); stroke-width:1; }
+  .chart .tick { fill:var(--muted); font-size:11px; }
+  .chart .line { fill:none; stroke:var(--accent); stroke-width:2.5; stroke-linejoin:round; }
+  .chart .area { fill:var(--accent); opacity:.12; }
+
+  /* Horizontal bars */
+  .bar-row { display:grid; grid-template-columns:130px 1fr 110px; gap:10px; align-items:center; margin-bottom:12px; font-size:13px; }
+  .bar-track { background:var(--line); border-radius:6px; height:12px; overflow:hidden; }
+  .bar-fill { height:100%; border-radius:6px; background:var(--accent); }
+  .bar-fill.debt { background:#dc2626; } .bar-fill.oblig { background:#d97706; } .bar-fill.budget { background:#7c3aed; } .bar-fill.left { background:var(--ok); }
+  .bar-val { text-align:end; font-variant-numeric:tabular-nums; }
+
+  /* Dialog */
+  dialog { border:1px solid var(--line); border-radius:12px; padding:0; background:var(--card); color:var(--text); width:min(500px,92vw); }
+  dialog::backdrop { background:rgba(15,23,42,.45); }
+  form.dlg { padding:20px; display:grid; gap:12px; }
+  label { display:grid; gap:4px; font-size:13px; color:var(--muted); }
+  .row2 { display:grid; grid-template-columns:1fr 1fr; gap:12px; }
+  .foot { display:flex; justify-content:flex-end; gap:8px; }
+  .error { color:var(--danger); font-size:13px; min-height:1em; }
+  .toolbar { display:flex; gap:8px; align-items:center; flex-wrap:wrap; }
+  .settings { display:grid; gap:14px; max-width:520px; padding:18px; }
+  @media (max-width:760px){
+    body{flex-direction:column;}
+    aside{width:100%; height:auto; position:static; flex-direction:row; flex-wrap:wrap; padding:10px;}
+    .brand,.side-foot{display:none;}
+    .nav{width:auto; padding:7px 10px;}
+    .content{padding:16px;}
+    .row2{grid-template-columns:1fr;}
+    .bar-row{grid-template-columns:90px 1fr 90px;}
+  }
+</style>
+</head>
+<body>
+<aside>
+  <div class="brand">Finance admin</div>
+  <button class="nav" data-page="overview">Overview</button>
+  <button class="nav" data-page="debts">Debts · الديون</button>
+  <button class="nav" data-page="obligations">Obligations · الالتزامات</button>
+  <button class="nav" data-page="budget">Budget · الميزانية</button>
+  <button class="nav" data-page="plan">Payment plan · خطة السداد</button>
+  <button class="nav" data-page="items">Items</button>
+  <button class="nav" data-page="settings">Settings · الإعدادات</button>
+  <div class="side-foot">Data stays in this browser.</div>
+</aside>
+
+<main>
+  <header class="top">
+    <h1 id="title">Overview</h1>
+    <span class="muted" id="today"></span>
+  </header>
+  <div class="content" id="page"></div>
+</main>
+
+<dialog id="dlg">
+  <form class="dlg" id="form" novalidate>
+    <h2 id="dlgTitle"></h2>
+    <div id="dlgFields" style="display:grid; gap:12px"></div>
+    <div class="error" id="formError"></div>
+    <div class="foot">
+      <button type="button" id="cancelBtn">Cancel · إلغاء</button>
+      <button type="submit" class="primary">Save · حفظ</button>
+    </div>
+  </form>
+</dialog>
+
+<script>
+(() => {
+  const KEY = "finance-admin-v3", OLD = "admin-dashboard-v2";
+  const $ = (id) => document.getElementById(id);
+  const esc = (s) => String(s ?? "").replace(/[&<>"']/g, (c) => ({ "&":"&amp;", "<":"&lt;", ">":"&gt;", '"':"&quot;", "'":"&#39;" }[c]));
+  const uid = () => (crypto.randomUUID ? crypto.randomUUID() : Date.now().toString(36) + Math.random().toString(36).slice(2));
+  const num = (v) => Number(v) || 0;
+  const sum = (arr, k) => arr.reduce((s, x) => s + num(x[k]), 0);
+  const MAX_MONTHS = 600;
+
+  const blank = () => ({ currency: "USD", salary: 0, strategy: "avalanche", debts: [], obligations: [], budget: [], items: [] });
+  function load() {
+    try {
+      const v3 = localStorage.getItem(KEY);
+      if (v3) return { ...blank(), ...JSON.parse(v3) };
+      const v2 = localStorage.getItem(OLD);
+      if (v2) {
+        const d = { ...blank(), ...JSON.parse(v2) };
+        d.debts = (d.debts || []).map((x) => ({ rate: 0, ...x }));
+        return d;
+      }
+    } catch { /* fall through */ }
+    return blank();
+  }
+  let state = load();
+  const save = () => { try { localStorage.setItem(KEY, JSON.stringify(state)); } catch {} };
+
+  const money = (n) => { try { return new Intl.NumberFormat(undefined, { style:"currency", currency: state.currency || "USD", maximumFractionDigits: 2 }).format(n || 0); } catch { return (n || 0).toFixed(2); } };
+  const compact = (n) => new Intl.NumberFormat(undefined, { notation:"compact", maximumFractionDigits:1 }).format(n || 0);
+  const monthLabel = (k) => { const d = new Date(); return new Date(d.getFullYear(), d.getMonth() + k, 1).toLocaleDateString(undefined, { month:"short", year:"numeric" }); };
+
+  // ---- Planner: pays minimums, then sends everything left to one debt at a time ----
+  function simulate(s) {
+    const oblig = sum(s.obligations, "monthly");
+    const bud = sum(s.budget, "limit");
+    const free = num(s.salary) - oblig - bud;
+    const debts = s.debts.filter((d) => num(d.owed) > 0).map((d) => ({
+      id: d.id, name: d.name, bal: num(d.owed), apr: num(d.rate), r: num(d.rate) / 1200, min: num(d.monthly), interest: 0, paidOff: null,
+    }));
+    const minTotal = debts.reduce((a, d) => a + d.min, 0);
+    const order = s.strategy === "snowball"
+      ? (a, b) => a.bal - b.bal
+      : (a, b) => b.apr - a.apr || a.bal - b.bal;
+    const budget = Math.max(free, minTotal);
+    const rows = [];
+    for (let m = 1; m <= MAX_MONTHS && debts.some((d) => d.bal > 0.005); m++) {
+      for (const d of debts) if (d.bal > 0) { const i = d.bal * d.r; d.bal += i; d.interest += i; }
+      const pay = {};
+      let paid = 0;
+      for (const d of debts) if (d.bal > 0.005) { const p = Math.min(d.min, d.bal); d.bal -= p; pay[d.id] = p; paid += p; }
+      let extra = budget - paid;
+      for (const d of [...debts].filter((x) => x.bal > 0.005).sort(order)) {
+        if (extra <= 0) break;
+        const p = Math.min(extra, d.bal); d.bal -= p; pay[d.id] = (pay[d.id] || 0) + p; paid += p; extra -= p;
+      }
+      for (const d of debts) if (d.paidOff === null && d.bal <= 0.005) { d.bal = 0; d.paidOff = m; }
+      rows.push({ m, pay, paid, balance: debts.reduce((a, d) => a + d.bal, 0), leftover: budget - paid });
+    }
+    const cleared = debts.every((d) => d.bal <= 0.005);
+    return { free, oblig, bud, minTotal, budget, rows, debts, cleared, short: free < minTotal, pointless: minTotal > 0 && free <= 0 };
+  }
+
+  // ---- Chart helpers ----
+  function lineSVG(vals) {
+    if (vals.length < 2) return '<div class="empty">Add debts with an amount owed to see the balance chart.</div>';
+    const W = 640, H = 260, P = 44, n = vals.length, max = Math.max(...vals, 1);
+    const x = (i) => P + i * (W - 2 * P) / (n - 1);
+    const y = (v) => H - P - (v / max) * (H - 2 * P);
+    const pts = vals.map((v, i) => `${x(i).toFixed(1)},${y(v).toFixed(1)}`).join(" ");
+    return `<svg class="chart" viewBox="0 0 ${W} ${H}" role="img" aria-label="Total debt balance over time">
+      <line class="axis" x1="${P}" y1="${H - P}" x2="${W - P}" y2="${H - P}"/>
+      <line class="axis" x1="${P}" y1="${P}" x2="${P}" y2="${H - P}"/>
+      <text class="tick" x="${P - 6}" y="${P + 4}" text-anchor="end">${esc(compact(max))}</text>
+      <text class="tick" x="${P - 6}" y="${H - P}" text-anchor="end">0</text>
+      <polygon class="area" points="${P},${H - P} ${pts} ${x(n - 1)},${H - P}"/>
+      <polyline class="line" points="${pts}"/>
+      <text class="tick" x="${P}" y="${H - 12}">${esc(monthLabel(1))}</text>
+      <text class="tick" x="${W - P}" y="${H - 12}" text-anchor="end">${esc(monthLabel(n))}</text>
+    </svg>`;
+  }
+  function bars(items) {
+    const max = Math.max(...items.map((i) => Math.abs(i.value)), 1);
+    return items.map((i) => `<div class="bar-row">
+      <span>${esc(i.label)}</span>
+      <div class="bar-track"><div class="bar-fill ${i.cls}" style="width:${Math.max(0, Math.min(100, Math.abs(i.value) / max * 100)).toFixed(1)}%"></div></div>
+      <span class="bar-val ${i.value < 0 ? "over" : ""}">${money(i.value)}</span></div>`).join("");
+  }
+
+  // ---- Pages ----
+  let page = "overview", showAll = false;
+  const TITLES = { overview:"Overview", debts:"Debts · الديون", obligations:"Obligations · الالتزامات", budget:"Budget · الميزانية", plan:"Payment plan · خطة السداد", items:"Items", settings:"Settings · الإعدادات" };
+
+  function table(headers, rows, emptyMsg) {
+    if (!rows.length) return `<div class="empty">${emptyMsg}</div>`;
+    return `<div class="table-wrap"><table><thead><tr>${headers.map((h) => `<th class="${h.num ? "num" : ""}">${h.t}</th>`).join("")}<th></th></tr></thead><tbody>${rows.join("")}</tbody></table></div>`;
+  }
+  const actionCell = (list, id) => `<td><div class="actions"><button class="small" data-edit="${list}:${id}">Edit</button><button class="small danger" data-del="${list}:${id}">Delete</button></div></td>`;
+
+  function pageOverview() {
+    const p = simulate(state);
+    const payoffLast = p.debts.filter((d) => d.paidOff).map((d) => d.paidOff).sort((a, b) => b - a)[0];
+    const totalInterest = p.debts.reduce((a, d) => a + d.interest, 0);
+    const upcoming = [
+      ...state.debts.filter((d) => num(d.monthly) > 0).map((d) => ({ due: num(d.due), name: d.name, amt: num(d.monthly), kind: "Debt" })),
+      ...state.obligations.map((o) => ({ due: num(o.due), name: o.name, amt: num(o.monthly), kind: "Obligation" })),
+    ].sort((a, b) => (a.due || 99) - (b.due || 99));
+    const left = num(state.salary) - p.oblig - p.bud - p.minTotal;
+    return `
+      <div class="cards">
+        <div class="card"><div class="label">Monthly income · الدخل</div><div class="value">${money(state.salary)}</div></div>
+        <div class="card"><div class="label">Committed each month</div><div class="value">${money(p.oblig + p.bud + p.minTotal)}</div><div class="hint">Obligations, budget, debt minimums</div></div>
+        <div class="card"><div class="label">Left after commitments</div><div class="value ${left < 0 ? "over" : "good"}">${money(left)}</div></div>
+        <div class="card"><div class="label">Debt-free by</div><div class="value">${payoffLast ? esc(monthLabel(payoffLast)) : "—"}</div><div class="hint">${state.debts.length ? `Interest over the plan: ${money(totalInterest)}` : "No debts yet"}</div></div>
+      </div>
+      ${p.short ? `<div class="alert bad">Debt minimums (${money(p.minTotal)}) are more than what's left after obligations and budget. See the Payment plan page.</div>` : ""}
+      ${p.pointless ? `<div class="alert bad">Nothing is left for debts after obligations and budget. Lower the budget or obligations, or raise income.</div>` : ""}
+      ${p.rows.length && !p.cleared ? `<div class="alert warn">At these payments the debts won't clear within 50 years. Check the interest rates and amounts.</div>` : ""}
+      <div class="grid2">
+        <section class="panel"><div class="panel-head"><div><h2>Total debt balance</h2><div class="sub">Falls to zero on the payment plan</div></div></div>
+          <div class="panel-body">${lineSVG(p.rows.map((r) => r.balance))}</div></section>
+        <section class="panel"><div class="panel-head"><div><h2>Where the money goes</h2><div class="sub">Each month</div></div></div>
+          <div class="panel-body">${bars([
+            { label:"Income", value: num(state.salary), cls:"left" },
+            { label:"Obligations", value: p.oblig, cls:"oblig" },
+            { label:"Budget", value: p.bud, cls:"budget" },
+            { label:"Debt minimums", value: p.minTotal, cls:"debt" },
+            { label:"Left over", value: left, cls: left < 0 ? "debt" : "left" },
+          ])}</div></section>
+      </div>
+      <section class="panel"><div class="panel-head"><div><h2>Due this month</h2><div class="sub">Sorted by due day</div></div></div>
+        ${table([{t:"Due day"},{t:"Name"},{t:"Type"},{t:"Amount",num:true}],
+          upcoming.map((u) => `<tr><td>${u.due || "—"}</td><td>${esc(u.name)}</td><td>${u.kind}</td><td class="num">${money(u.amt)}</td><td></td></tr>`),
+          "Add debts or obligations to see due dates.")}
+      </section>`;
+  }
+
+  function pageDebts() {
+    return `<section class="panel"><div class="panel-head"><div><h2>Debts</h2><div class="sub">The planner uses the amount owed, the interest rate and the monthly payment.</div></div>
+      <button class="primary small" data-add="debts">+ Add debt</button></div>
+      ${table([{t:"Name"},{t:"Owed",num:true},{t:"APR %",num:true},{t:"Monthly",num:true},{t:"Due day",num:true}],
+        state.debts.map((d) => `<tr><td><strong>${esc(d.name)}</strong>${d.notes ? `<div class="muted">${esc(d.notes)}</div>` : ""}</td>
+          <td class="num">${money(num(d.owed))}</td><td class="num">${num(d.rate)}</td><td class="num">${money(num(d.monthly))}</td><td class="num">${esc(d.due) || "—"}</td>${actionCell("debts", d.id)}</tr>`),
+        "No debts yet. Click “Add debt”.")}</section>`;
+  }
+
+  function pageObligations() {
+    return `<section class="panel"><div class="panel-head"><div><h2>Obligations · الالتزامات</h2><div class="sub">Rent, bills, subscriptions and other fixed monthly commitments</div></div>
+      <button class="primary small" data-add="obligations">+ Add obligation</button></div>
+      ${table([{t:"Name"},{t:"Category"},{t:"Monthly",num:true},{t:"Due day",num:true}],
+        state.obligations.map((o) => `<tr><td><strong>${esc(o.name)}</strong></td><td>${esc(o.category) || "—"}</td><td class="num">${money(num(o.monthly))}</td><td class="num">${esc(o.due) || "—"}</td>${actionCell("obligations", o.id)}</tr>`),
+        "No obligations yet.")}</section>`;
+  }
+
+  function pageBudget() {
+    return `<section class="panel"><div class="panel-head"><div><h2>Budget · الميزانية</h2><div class="sub">Monthly limit and spending for each category. Limits come out before the debt plan.</div></div>
+      <button class="primary small" data-add="budget">+ Add category</button></div>
+      ${table([{t:"Category"},{t:"Limit",num:true},{t:"Spent",num:true},{t:"Left",num:true}],
+        state.budget.map((b) => { const left = num(b.limit) - num(b.spent); return `<tr><td><strong>${esc(b.name)}</strong></td><td class="num">${money(num(b.limit))}</td><td class="num">${money(num(b.spent))}</td><td class="num ${left < 0 ? "over" : ""}">${money(left)}</td>${actionCell("budget", b.id)}</tr>`; }),
+        "No budget categories yet.")}</section>`;
+  }
+
+  function pagePlan() {
+    const p = simulate(state);
+    const shown = showAll ? p.rows : p.rows.slice(0, 24);
+    const debtCols = p.debts;
+    const payoffRows = p.debts.map((d) => `<tr><td><strong>${esc(d.name)}</strong></td><td class="num">${money(num(state.debts.find((x) => x.id === d.id)?.owed))}</td><td class="num">${d.paidOff ? esc(monthLabel(d.paidOff)) : "not cleared"}</td><td class="num">${money(d.interest)}</td></tr>`);
+    const schedHead = `<th>Month</th>${debtCols.map((d) => `<th class="num">${esc(d.name)}</th>`).join("")}<th class="num">Total paid</th><th class="num">Balance left</th><th class="num">Left over</th>`;
+    const schedRows = shown.map((r) => `<tr><td>${esc(monthLabel(r.m))}</td>${debtCols.map((d) => `<td class="num">${money(r.pay[d.id] || 0)}</td>`).join("")}<td class="num">${money(r.paid)}</td><td class="num">${money(r.balance)}</td><td class="num ${r.leftover < 0 ? "over" : ""}">${money(r.leftover)}</td></tr>`).join("");
+    return `
+      <section class="panel"><div class="panel-body toolbar">
+        <label style="min-width:260px">Strategy · الاستراتيجية
+          <select id="strategy">
+            <option value="avalanche" ${state.strategy !== "snowball" ? "selected" : ""}>Avalanche: highest interest first (cheapest)</option>
+            <option value="snowball" ${state.strategy === "snowball" ? "selected" : ""}>Snowball: smallest balance first (quickest wins)</option>
+          </select>
+        </label>
+        <div class="muted" style="flex:1">Each month you pay every minimum, then send all money left after obligations and budget to one debt, in the order above.</div>
+      </div></section>
+      ${p.short ? `<div class="alert bad">Minimums (${money(p.minTotal)}) are more than what's left (${money(p.free)}). Some debts may fall behind.</div>` : ""}
+      ${!state.debts.length ? `<div class="alert warn">Add debts first.</div>` : ""}
+      ${p.rows.length && !p.cleared ? `<div class="alert warn">The debts won't clear within 50 years at these payments.</div>` : ""}
+      <div class="cards">
+        <div class="card"><div class="label">Free for debts each month</div><div class="value">${money(p.budget)}</div><div class="hint">Income minus obligations and budget</div></div>
+        <div class="card"><div class="label">Debt-free by</div><div class="value">${p.rows.length && p.cleared ? esc(monthLabel(p.rows.length)) : "—"}</div><div class="hint">${p.rows.length ? `${p.rows.length} months` : ""}</div></div>
+        <div class="card"><div class="label">Total interest</div><div class="value">${money(p.debts.reduce((a, d) => a + d.interest, 0))}</div></div>
+      </div>
+      <section class="panel"><div class="panel-head"><div><h2>Balance over time</h2></div></div><div class="panel-body">${lineSVG(p.rows.map((r) => r.balance))}</div></section>
+      <section class="panel"><div class="panel-head"><div><h2>Payoff by debt</h2></div></div>
+        ${table([{t:"Debt"},{t:"Starting owed",num:true},{t:"Paid off",num:true},{t:"Interest paid",num:true}], payoffRows, "No debts.")}</section>
+      <section class="panel"><div class="panel-head"><div><h2>Month-by-month schedule</h2><div class="sub">${p.rows.length} months</div></div>
+        ${p.rows.length > 24 ? `<button class="small" data-toggle-all>${showAll ? "Show first 24" : "Show all"}</button>` : ""}</div>
+        ${p.rows.length ? `<div class="table-wrap"><table><thead><tr>${schedHead}</tr></thead><tbody>${schedRows}</tbody></table></div>` : `<div class="empty">No schedule yet.</div>`}
+      </section>`;
+  }
+
+  function pageItems() {
+    return `<section class="panel"><div class="panel-head"><h2>Items</h2><button class="primary small" data-add="items">+ Add item</button></div>
+      ${table([{t:"Name"},{t:"Category"},{t:"Status"},{t:"Value",num:true}],
+        state.items.map((it) => `<tr><td><strong>${esc(it.name)}</strong></td><td>${esc(it.category) || "—"}</td><td><span class="badge s-${esc(it.status)}">${esc(it.status)}</span></td><td class="num">${money(num(it.value))}</td>${actionCell("items", it.id)}</tr>`),
+        "No items yet.")}</section>`;
+  }
+
+  function pageSettings() {
+    return `<section class="panel"><div class="panel-head"><h2>Income & currency</h2></div>
+      <div class="settings">
+        <label>Monthly take-home pay · الراتب الشهري
+          <input id="salary" type="number" min="0" step="0.01" value="${state.salary || ""}">
+        </label>
+        <label>Currency code
+          <input id="currency" maxlength="4" value="${esc(state.currency)}" placeholder="USD">
+        </label>
+        <div><button class="primary" id="saveSettings">Save</button></div>
+      </div></section>
+      <section class="panel"><div class="panel-head"><h2>Backup</h2></div>
+      <div class="settings">
+        <p class="muted" style="margin:0">Your data is saved only in this browser. Export a backup regularly.</p>
+        <div class="toolbar"><button id="exportBtn">Export JSON</button><button id="importBtn">Import JSON</button><input type="file" id="importFile" accept="application/json" hidden></div>
+      </div></section>`;
+  }
+
+  const PAGES = { overview: pageOverview, debts: pageDebts, obligations: pageObligations, budget: pageBudget, plan: pagePlan, items: pageItems, settings: pageSettings };
+
+  function render() {
+    document.querySelectorAll(".nav").forEach((b) => b.classList.toggle("on", b.dataset.page === page));
+    $("title").textContent = TITLES[page];
+    $("today").textContent = new Date().toLocaleDateString(undefined, { weekday:"long", day:"numeric", month:"long", year:"numeric" });
+    $("page").innerHTML = PAGES[page]();
+  }
+
+  // ---- Forms ----
+  const SCHEMA = {
+    debts: { title: "debt", fields: [
+      { k:"name", label:"Name · الاسم", type:"text", req:true },
+      { k:"owed", label:"Amount still owed", type:"number" },
+      { k:"rate", label:"Interest rate, yearly % (APR)", type:"number", max:100 },
+      { k:"monthly", label:"Minimum monthly payment", type:"number" },
+      { k:"due", label:"Due day (1–31)", type:"number", max:31 },
+      { k:"notes", label:"Notes", type:"textarea" },
+    ]},
+    obligations: { title: "obligation · التزام", fields: [
+      { k:"name", label:"Name", type:"text", req:true },
+      { k:"category", label:"Category", type:"text" },
+      { k:"monthly", label:"Monthly amount", type:"number" },
+      { k:"due", label:"Due day (1–31)", type:"number", max:31 },
+      { k:"notes", label:"Notes", type:"textarea" },
+    ]},
+    budget: { title: "budget category", fields: [
+      { k:"name", label:"Category", type:"text", req:true },
+      { k:"limit", label:"Monthly limit", type:"number" },
+      { k:"spent", label:"Spent this month", type:"number" },
+    ]},
+    items: { title: "item", fields: [
+      { k:"name", label:"Name", type:"text", req:true },
+      { k:"category", label:"Category", type:"text" },
+      { k:"status", label:"Status", type:"select", options:["active","paused","archived"] },
+      { k:"value", label:"Value", type:"number" },
+      { k:"notes", label:"Notes", type:"textarea" },
+    ]},
+  };
+  let editing = null;
+  function openForm(list, id) {
+    const sch = SCHEMA[list];
+    const rec = id ? state[list].find((r) => r.id === id) : null;
+    editing = { list, id };
+    $("dlgTitle").textContent = (rec ? "Edit " : "Add ") + sch.title;
+    $("formError").textContent = "";
+    $("dlgFields").innerHTML = sch.fields.map((f) => {
+      const v = rec ? (rec[f.k] ?? "") : "";
+      const attrs = `name="${f.k}" ${f.req ? "required" : ""}`;
+      let input;
+      if (f.type === "textarea") input = `<textarea ${attrs} maxlength="500">${esc(v)}</textarea>`;
+      else if (f.type === "select") input = `<select ${attrs}>${f.options.map((o) => `<option value="${o}" ${o === (v || f.options[0]) ? "selected" : ""}>${o}</option>`).join("")}</select>`;
+      else if (f.type === "number") input = `<input ${attrs} type="number" step="0.01" min="0" ${f.max ? `max="${f.max}"` : ""} value="${esc(v)}">`;
+      else input = `<input ${attrs} type="text" maxlength="120" value="${esc(v)}">`;
+      return `<label>${f.label}${input}</label>`;
+    }).join("");
+    $("dlg").showModal();
+    $("form").querySelector("input,select,textarea")?.focus();
+  }
+  $("form").onsubmit = (e) => {
+    e.preventDefault();
+    const { list, id } = editing, f = e.target, rec = {};
+    for (const fd of SCHEMA[list].fields) {
+      const raw = f[fd.k].value.trim();
+      if (fd.req && !raw) { $("formError").textContent = fd.label + " is required."; f[fd.k].focus(); return; }
+      if (fd.type === "number") {
+        const n = raw === "" ? 0 : Number(raw);
+        if (!Number.isFinite(n) || n < 0) { $("formError").textContent = fd.label + " must be zero or more."; return; }
+        if (fd.max && n > fd.max) { $("formError").textContent = fd.label + " must be at most " + fd.max + "."; return; }
+        rec[fd.k] = Math.round(n * 100) / 100;
+      } else rec[fd.k] = raw;
+    }
+    if (id) Object.assign(state[list].find((r) => r.id === id), rec);
+    else state[list].push({ id: uid(), ...rec });
+    save(); $("dlg").close(); render();
+  };
+  $("cancelBtn").onclick = () => $("dlg").close();
+
+  // ---- Events ----
+  document.querySelectorAll(".nav").forEach((b) => b.onclick = () => { page = b.dataset.page; showAll = false; render(); });
+  document.addEventListener("click", (e) => {
+    const add = e.target.closest("[data-add]");
+    if (add) return openForm(add.dataset.add, null);
+    const ed = e.target.closest("[data-edit]");
+    if (ed) { const [l, id] = ed.dataset.edit.split(":"); return openForm(l, id); }
+    const del = e.target.closest("[data-del]");
+    if (del) {
+      const [l, id] = del.dataset.del.split(":");
+      const rec = state[l].find((r) => r.id === id);
+      if (rec && confirm(`Delete “${rec.name}”? This can't be undone.`)) { state[l] = state[l].filter((r) => r.id !== id); save(); render(); }
+      return;
+    }
+    if (e.target.closest("[data-toggle-all]")) { showAll = !showAll; render(); return; }
+    if (e.target.id === "saveSettings") {
+      state.salary = Math.max(0, num($("salary").value));
+      state.currency = ($("currency").value.trim().toUpperCase() || "USD").slice(0, 4);
+      save(); render(); alert("Saved.");
+    }
+    if (e.target.id === "exportBtn") {
+      const blob = new Blob([JSON.stringify(state, null, 2)], { type: "application/json" });
+      const a = document.createElement("a"); a.href = URL.createObjectURL(blob);
+      a.download = `finance-admin-${new Date().toISOString().slice(0, 10)}.json`; a.click(); URL.revokeObjectURL(a.href);
+    }
+    if (e.target.id === "importBtn") $("importFile").click();
+  });
+  document.addEventListener("change", async (e) => {
+    if (e.target.id === "strategy") { state.strategy = e.target.value; save(); render(); return; }
+    if (e.target.id !== "importFile") return;
+    const file = e.target.files[0]; if (!file) return;
+    try {
+      const d = JSON.parse(await file.text());
+      if (!d || typeof d !== "object" || Array.isArray(d)) throw new Error("File must be a saved export.");
+      if (!confirm("Replace all current data with this file?")) return;
+      state = { ...blank(), ...d };
+      for (const k of ["debts","obligations","budget","items"]) if (!Array.isArray(state[k])) state[k] = [];
+      save(); render();
+    } catch (err) { alert("Import failed: " + err.message); }
+    finally { e.target.value = ""; }
+  });
+
+  render();
+})();
+</script>
+</body>
+</html>
