@@ -191,7 +191,7 @@
 
 <script>
 (() => {
-  const KEY = "finance-admin-v5", PREV = ["finance-admin-v4","finance-admin-v3","admin-dashboard-v2"];
+  const KEY = "finance-admin-v6", PREV = ["finance-admin-v5","finance-admin-v4","finance-admin-v3","admin-dashboard-v2"];
   const $ = (id) => document.getElementById(id);
   const esc = (s) => String(s ?? "").replace(/[&<>"']/g, (c) => ({ "&":"&amp;", "<":"&lt;", ">":"&gt;", '"':"&quot;", "'":"&#39;" }[c]));
   const uid = () => (crypto.randomUUID ? crypto.randomUUID() : Date.now().toString(36) + Math.random().toString(36).slice(2));
@@ -201,7 +201,7 @@
   const COLORS = ["#6366f1","#ec4899","#f59e0b","#10b981","#06b6d4","#8b5cf6","#ef4444","#84cc16"];
   const MAX_DEBT_MONTHS = 600;
 
-  const blank = () => ({ currency:"USD", salary:0, savingsGoal:0, savingsStart:0, horizon:12, strategy:"avalanche", debts:[], obligations:[], budget:[], payments:[], lent:[], repayments:[] });
+  const blank = () => ({ currency:"USD", salary:0, incomes:[], savingsGoal:0, savingsGoalName:"", savingsTarget:0, savingsStart:0, cashNow:0, salaryPending:"yes", horizon:12, strategy:"avalanche", debts:[], obligations:[], budget:[], payments:[], lent:[], repayments:[] });
   function load() {
     try {
       const v5 = localStorage.getItem(KEY); if (v5) return { ...blank(), ...JSON.parse(v5) };
@@ -210,7 +210,7 @@
         if (raw) {
           const d = { ...blank(), ...JSON.parse(raw) };
           d.debts = (d.debts||[]).map((x) => ({ rate:0, ...x }));
-          d.payments = d.payments || []; d.lent = d.lent || []; d.repayments = d.repayments || [];
+          d.payments = d.payments || []; d.lent = d.lent || []; d.repayments = d.repayments || []; d.incomes = d.incomes || [];
           d.budget = (d.budget||[]).map((b) => ({ flex:"yes", ...b }));
           delete d.items;
           return d;
@@ -223,6 +223,7 @@
   state.debts.forEach((d) => { if (d.original === undefined) d.original = num(d.owed); });
   const save = () => { try { localStorage.setItem(KEY, JSON.stringify(state)); } catch {} };
 
+  const totalIncome = (s = state) => num(s.salary) + sum(s.incomes || [], "monthly");
   const money = (n) => { try { return new Intl.NumberFormat(undefined, { style:"currency", currency: state.currency||"USD", maximumFractionDigits:0 }).format(n||0); } catch { return (n||0).toFixed(0); } };
   const money2 = (n) => { try { return new Intl.NumberFormat(undefined, { style:"currency", currency: state.currency||"USD", maximumFractionDigits:2 }).format(n||0); } catch { return (n||0).toFixed(2); } };
   const compact = (n) => new Intl.NumberFormat(undefined, { notation:"compact", maximumFractionDigits:1 }).format(n||0);
@@ -240,10 +241,14 @@
   //   6. Anything left goes to debts (per strategy), then to savings once debts are clear.
   function plan(s) {
     const H = Math.max(1, Math.min(60, num(s.horizon) || 12));
-    const salary = num(s.salary), oblig = sum(s.obligations, "monthly");
-    const cats = s.budget.map((b) => ({ id:b.id, name:b.name, limit:num(b.limit), flex: b.flex !== "no", carry:0 }));
+    const mainSalary = num(s.salary), otherIncome = sum(s.incomes || [], "monthly");
+    const salary = mainSalary + otherIncome;
+    const oblig = sum(s.obligations, "monthly");
+    const pending = s.salaryPending !== "no";
+    const obligFirstMonth = sum(s.obligations.filter((o) => o.paid !== "yes"), "monthly");
+    const cats = s.budget.map((b) => ({ id:b.id, name:b.name, limit:num(b.limit), spent:num(b.spent), cur:0, flex: b.flex !== "no", carry:0 }));
     const debts = s.debts.filter((d) => num(d.owed) > 0).map((d) => ({
-      id:d.id, name:d.name, bal:num(d.owed), apr:num(d.rate), r:num(d.rate)/1200, min:num(d.monthly), interest:0, paidOff:null, paid:0,
+      id:d.id, name:d.name, bal:num(d.owed), apr:num(d.rate), r:num(d.rate)/1200, min:num(d.monthly), paidNow: d.paid === "yes", interest:0, paidOff:null, paid:0,
     }));
     const lent = (s.lent || []).filter((l) => num(l.owed) > 0).map((l) => ({ id:l.id, name:l.name, bal:num(l.owed), exp:num(l.expected) }));
     const order = s.strategy === "snowball" ? (a, b) => a.bal - b.bal : (a, b) => b.apr - a.apr || a.bal - b.bal;
@@ -254,7 +259,7 @@
     // Spread one group's payment across its categories in proportion to what each needed.
     function settle(group, need, paid) {
       for (const c of group) {
-        const cNeed = c.limit + c.carry;
+        const cNeed = c.cur + c.carry;
         const cPaid = need > 0 ? paid * cNeed / need : 0;
         c.carry = Math.max(0, cNeed - cPaid);
       }
@@ -262,15 +267,17 @@
 
     for (let m = 1; m <= H; m++) {
       for (const d of debts) if (d.bal > 0.005) { const i = d.bal * d.r; d.bal += i; d.interest += i; }
-      const row = { m, income:salary, inflow:0, oblig, minDue:0, minPaid:0, essPaid:0, savPaid:0, savAdded:0, flxPaid:0, extra:0, pay:{}, postponed:[], savShort:0, unfunded:0, over:0, savings:0, debtBal:0, status:"ok" };
+      for (const c of cats) c.cur = m === 1 ? Math.max(0, c.limit - c.spent) : c.limit;
+      const row = { m, income:salary, inflow:0, oblig: m === 1 ? obligFirstMonth : oblig, minDue:0, minPaid:0, essPaid:0, savPaid:0, savAdded:0, flxPaid:0, extra:0, pay:{}, postponed:[], savShort:0, unfunded:0, over:0, savings:0, debtBal:0, status:"ok" };
       for (const l of lent) if (l.bal > 0.005) { const r = Math.min(l.exp, l.bal); l.bal -= r; row.inflow += r; }
-      row.income = salary + row.inflow;
-      let cash = row.income - oblig;
+      const salaryNow = m === 1 ? (otherIncome + (pending ? 0 : mainSalary)) : salary;
+      row.income = salaryNow + row.inflow;
+      let cash = row.income - row.oblig + (m === 1 ? num(s.cashNow) : 0);
       if (cash < 0) { row.over = -cash; cash = 0; }
 
       // 2. Debt minimums (paid in list order; anything unpaid stays owed and keeps accruing interest)
       for (const d of debts) if (d.bal > 0.005) {
-        const need = Math.min(d.min, d.bal);
+        const need = m === 1 && d.paidNow ? 0 : Math.min(d.min, d.bal);
         row.minDue += need;
         const p = Math.min(need, cash);
         cash -= p; d.bal -= p; d.paid += p; row.minPaid += p; row.pay[d.id] = p;
@@ -279,7 +286,7 @@
 
       // 3. Essential budget
       const ess = cats.filter((c) => !c.flex), flx = cats.filter((c) => c.flex);
-      const essNeed = ess.reduce((a, c) => a + c.limit + c.carry, 0);
+      const essNeed = ess.reduce((a, c) => a + c.cur + c.carry, 0);
       const essPaid = Math.min(cash, essNeed); cash -= essPaid; row.essPaid = essPaid;
       settle(ess, essNeed, essPaid);
 
@@ -287,7 +294,7 @@
       const savPay = Math.min(cash, savGoal); cash -= savPay; row.savPaid = savPay; row.savShort = savGoal - savPay;
 
       // 5. Flexible budget
-      const flxNeed = flx.reduce((a, c) => a + c.limit + c.carry, 0);
+      const flxNeed = flx.reduce((a, c) => a + c.cur + c.carry, 0);
       const flxPaid = Math.min(cash, flxNeed); cash -= flxPaid; row.flxPaid = flxPaid;
       settle(flx, flxNeed, flxPaid);
       row.postponed = cats.filter((c) => c.carry > 0.005).map((c) => ({ name:c.name, amt:c.carry }));
@@ -387,7 +394,9 @@
   function pageOverview() {
     const p = plan(state);
     const first = p.rows[0];
-    const left = num(state.salary) - p.oblig - p.minTotal;
+    const left = totalIncome() - p.oblig - p.minTotal;
+    const netWorth = num(state.cashNow) + num(state.savingsStart) + sum(state.lent, "owed") - sum(state.debts, "owed");
+    const dti = totalIncome() ? (p.minTotal / totalIncome() * 100) : 0;
     const labels = p.rows.map((r) => monthLabel(r.m));
     const notes = p.notes.slice(0, 6);
     const commitments = p.oblig + p.minTotal + p.budgetTotal;
@@ -401,6 +410,8 @@
         <div class="kpi"><div class="label">Savings in ${p.H} months</div><div class="value good">${money(p.endSavings)}</div><div class="hint">Debt left: ${money(p.endDebt)}</div></div>
         <div class="kpi"><div class="label">Owed to you</div><div class="value">${money(sum(state.lent, "owed"))}</div><div class="hint">${state.lent.length} ${state.lent.length === 1 ? "person" : "people"}, back in the plan: ${money(p.lentIn)}</div></div>
         <div class="kpi"><div class="label">Debt-free by</div><div class="value">${p.hasDebts ? (p.cleared ? esc(monthLabel(p.lastPaid)) : "Not within plan") : "—"}</div><div class="hint">${p.hasDebts ? `Interest over the plan: ${money(p.interest)}` : "No debts added"}</div></div>
+        <div class="kpi"><div class="label">Net worth now</div><div class="value ${netWorth<0?"over":"good"}">${money(netWorth)}</div><div class="hint">Cash, savings and money owed to you, minus debts</div></div>
+        <div class="kpi"><div class="label">Debt-to-income</div><div class="value ${dti>40?"over":""}">${dti.toFixed(0)}%</div><div class="hint">Debt minimums as a share of income${dti>40?" · high":""}</div></div>
       </div>
       <div class="grid2">
         <section class="panel"><div class="panel-head"><div><h2>Debt and savings over ${p.H} months</h2><div class="sub">Each month's plan</div></div></div>
@@ -444,6 +455,7 @@
     </tr>`).join("");
     const debtRows = p.debts.map((d) => `<tr><td><span class="name">${esc(d.name)}</span></td><td class="num">${money(num(state.debts.find((x) => x.id === d.id)?.owed))}</td><td class="num">${d.paidOff ? esc(monthLabel(d.paidOff)) : "not in plan"}</td><td class="num">${money(d.interest)}</td></tr>`);
     return `
+      <div class="muted" style="margin:-8px 0 16px">Starting money in hand: <strong style="color:var(--text)">${money(num(state.cashNow))}</strong>${state.salaryPending!=="no" ? " · this month's salary still to come" : ""}. Items marked “already paid” and budget already spent are not charged again.</div>
       <section class="panel"><div class="control">
         <label>Debt strategy
           <select id="strategy">
@@ -466,7 +478,7 @@
       </div>
       ${p.notes.length ? `<section class="panel"><div class="panel-head"><div><h2>Replan suggestions</h2><div class="sub">Postpone these to next month</div></div></div>
         <div class="panel-body"><div class="notes">${p.notes.map((n) => `<div class="note"><span class="m">${esc(monthLabel(n.m))}</span><span>${noteIcon(n.kind)} ${esc(n.text)}</span></div>`).join("")}</div></div></section>` : ""}
-      <section class="panel"><div class="panel-head"><div><h2>Month by month</h2><div class="sub">Income, fixed costs, debts and savings for each month</div></div><button class="small" id="csvBtn">Export CSV</button></div>
+      <section class="panel"><div class="panel-head"><div><h2>Month by month</h2><div class="sub">Income, fixed costs, debts and savings for each month</div></div><div class="toolbar"><button class="small" id="csvBtn">Export CSV</button><button class="small" id="printBtn">Print</button></div></div>
         ${p.rows.length ? `<div class="table-wrap"><table><thead><tr>${head}</tr></thead><tbody>${body}</tbody></table></div>` : `<div class="empty">No plan yet.</div>`}</section>
       <div class="grid2">
         <section class="panel"><div class="panel-head"><div><h2>Debt and savings</h2></div></div><div class="panel-body">${lineChart([
@@ -479,13 +491,23 @@
   }
 
   function pageIncome() {
+    const others = sum(state.incomes, "monthly");
     return `<section class="panel"><div class="panel-head"><div><h2>Income · الدخل</h2><div class="sub">Used for every month in the plan</div></div></div>
       <div class="form-grid">
-        <label>Monthly take-home pay · الراتب الشهري<input id="salary" type="number" min="0" step="0.01" value="${state.salary||""}"></label>
+        <label>Main monthly income (salary) · الراتب الشهري<input id="salary" type="number" min="0" step="0.01" value="${state.salary||""}"></label>
         <label>Currency code<input id="currency" maxlength="4" value="${esc(state.currency)}" placeholder="USD"></label>
         <label>Savings you already have<input id="savStart" type="number" min="0" step="0.01" value="${state.savingsStart||""}" placeholder="0"></label>
+        <label>Money in hand right now (after what you've already paid this month)<input id="cashNow" type="number" step="0.01" value="${state.cashNow||""}" placeholder="0"></label>
+        <label>Is this month's salary still to come?<select id="salPend"><option value="yes" ${state.salaryPending!=="no"?"selected":""}>Yes, not received yet</option><option value="no" ${state.salaryPending==="no"?"selected":""}>No, already in my money above</option></select></label>
         <div class="full"><button class="primary" id="saveIncome">Save</button></div>
-      </div></section>`;
+      </div></section>
+      <section class="panel"><div class="panel-head"><div><h2>Other income</h2><div class="sub">Side income, allowances or anything else that arrives monthly, on top of your salary.</div></div>
+        <button class="primary small" data-add="incomes">+ Add income source</button></div>
+        ${table([{t:"Name"},{t:"Monthly",num:true}],
+          state.incomes.map((i, idx) => `<tr><td><span class="name"><span class="avatar" style="background:${COLORS[(idx+5)%COLORS.length]}">${initials(i.name)}</span>${esc(i.name)}</span></td><td class="num">${money2(num(i.monthly))}</td>${actions("incomes", i.id)}</tr>`),
+          "No other income yet.")}
+        ${state.incomes.length ? `<div class="panel-body muted">Total other income: <strong style="color:var(--text)">${money2(others)}</strong> · Combined monthly income: <strong style="color:var(--text)">${money2(totalIncome())}</strong></div>` : ""}
+      </section>`;
   }
 
   function pageDebts() {
@@ -498,6 +520,7 @@
         <div class="progress"><div style="width:${pct.toFixed(1)}%"></div></div>
         <div class="meta"><span>${pct.toFixed(0)}% repaid</span><span>${num(d.rate)}% APR</span></div>
         <div class="meta"><span>Min ${money2(num(d.monthly))} / month</span><span>Due day ${esc(d.due)||"—"}</span></div>
+        ${d.paid==="yes" ? '<div class="muted">Already paid this month</div>' : ""}
         ${d.notes ? `<div class="muted">${esc(d.notes)}</div>` : ""}
       </div>`;
     }).join("");
@@ -520,7 +543,7 @@
     return `<section class="panel"><div class="panel-head"><div><h2>Obligations · الالتزامات</h2><div class="sub">Rent, bills, subscriptions and other fixed monthly costs. Paid first, every month.</div></div>
       <button class="primary small" data-add="obligations">+ Add obligation</button></div>
       ${table([{t:"Name"},{t:"Category"},{t:"Monthly",num:true},{t:"Due day",num:true}],
-        state.obligations.map((o, i) => `<tr><td><span class="name"><span class="avatar" style="background:${COLORS[(i+3)%COLORS.length]}">${initials(o.name)}</span>${esc(o.name)}</span></td><td>${esc(o.category)||"—"}</td><td class="num">${money2(num(o.monthly))}</td><td class="num">${esc(o.due)||"—"}</td>${actions("obligations", o.id)}</tr>`),
+        state.obligations.map((o, i) => `<tr><td><span class="name"><span class="avatar" style="background:${COLORS[(i+3)%COLORS.length]}">${initials(o.name)}</span>${esc(o.name)}</span>${o.paid==="yes" ? '<div class="muted">Paid this month</div>' : ""}</td><td>${esc(o.category)||"—"}</td><td class="num">${money2(num(o.monthly))}</td><td class="num">${esc(o.due)||"—"}</td>${actions("obligations", o.id)}</tr>`),
         "No obligations yet. Add rent and bills here.")}</section>`;
   }
 
@@ -528,8 +551,8 @@
     const total = sum(state.budget, "limit");
     return `<section class="panel"><div class="panel-head"><div><h2>Budget · الميزانية</h2><div class="sub">Monthly spending limits. Mark a category "Can postpone" and the plan will move it to next month when money is tight.</div></div>
       <button class="primary small" data-add="budget">+ Add category</button></div>
-      ${table([{t:"Category"},{t:"Limit",num:true},{t:"Can postpone?"}],
-        state.budget.map((b) => `<tr><td><strong>${esc(b.name)}</strong></td><td class="num">${money2(num(b.limit))}</td><td>${b.flex === "no" ? '<span class="badge b-ok">Essential</span>' : '<span class="badge b-replan">Can postpone</span>'}</td>${actions("budget", b.id)}</tr>`),
+      ${table([{t:"Category"},{t:"Limit",num:true},{t:"Spent",num:true},{t:"Left",num:true},{t:"Can postpone?"}],
+        state.budget.map((b) => `<tr><td><strong>${esc(b.name)}</strong></td><td class="num">${money2(num(b.limit))}</td><td class="num">${money2(num(b.spent))}</td><td class="num">${money2(Math.max(0, num(b.limit)-num(b.spent)))}</td><td>${b.flex === "no" ? '<span class="badge b-ok">Essential</span>' : '<span class="badge b-replan">Can postpone</span>'}</td>${actions("budget", b.id)}</tr>`),
         "No budget categories yet. Add groceries, transport, dining out and so on.")}
       ${state.budget.length ? `<div class="panel-body muted">Total monthly limit: <strong style="color:var(--text)">${money2(total)}</strong></div>` : ""}</section>`;
   }
@@ -593,11 +616,16 @@
       { k:"date", label:"Date", type:"date", req:true },
       { k:"note", label:"Note", type:"text", full:true },
     ]},
+    incomes: { title:"income source", fields:[
+      { k:"name", label:"Name (e.g. Freelance work, Side job)", type:"text", req:true },
+      { k:"monthly", label:"Monthly amount", type:"number" },
+    ]},
     lent: { title:"person you lent to", fields:[
       { k:"name", label:"Name", type:"text", req:true, full:true },
       { k:"owed", label:"Amount still owed to you", type:"number" },
       { k:"expected", label:"Expected monthly repayment", type:"number" },
       { k:"due", label:"Due day (1–31)", type:"number", max:31 },
+      { k:"paid", label:"Already paid this month?", type:"select", options:["no","yes"], labels:{ no:"No, still to pay", yes:"Yes, already paid" } },
       { k:"notes", label:"Notes", type:"textarea", full:true },
     ]},
     repay: { title:"money received", fields:[
@@ -611,11 +639,13 @@
       { k:"category", label:"Category", type:"text" },
       { k:"monthly", label:"Monthly amount", type:"number" },
       { k:"due", label:"Due day (1–31)", type:"number", max:31 },
+      { k:"paid", label:"Already paid this month?", type:"select", options:["no","yes"], labels:{ no:"No, still to pay", yes:"Yes, already paid" } },
       { k:"notes", label:"Notes", type:"textarea", full:true },
     ]},
     budget: { title:"budget category", fields:[
       { k:"name", label:"Category (e.g. Groceries)", type:"text", req:true },
       { k:"limit", label:"Monthly limit", type:"number" },
+      { k:"spent", label:"Already spent this month", type:"number" },
       { k:"flex", label:"Can it be postponed to next month?", type:"select", options:["yes","no"], labels:{ yes:"Yes, can postpone", no:"No, essential" } },
     ]},
   };
@@ -627,7 +657,7 @@
     $("dlgTitle").textContent = (rec ? "Edit " : "Add ") + sch.title;
     $("formError").textContent = "";
     $("dlgFields").innerHTML = sch.fields.map((f) => {
-      const v = rec ? (rec[f.k] ?? "") : (preset[f.k] ?? (f.type === "date" ? today() : (f.k === "flex" ? "yes" : "")));
+      const v = rec ? (rec[f.k] ?? "") : (preset[f.k] ?? (f.type === "date" ? today() : (f.k === "flex" ? "yes" : (f.k === "paid" ? "no" : ""))));
       const attrs = `name="${f.k}" ${f.req ? "required" : ""}`;
       let input;
       if (f.type === "textarea") input = `<textarea ${attrs} maxlength="500">${esc(v)}</textarea>`;
@@ -739,6 +769,8 @@
     if (e.target.id === "saveIncome") {
       state.salary = Math.max(0, num($("salary").value));
       state.savingsStart = Math.max(0, num($("savStart").value));
+      state.cashNow = num($("cashNow").value);
+      state.salaryPending = $("salPend").value;
       state.currency = ($("currency").value.trim().toUpperCase() || "USD").slice(0, 4);
       save(); render(); toast("Income saved.");
     }
@@ -747,6 +779,7 @@
       state.currency = ($("currency").value.trim().toUpperCase() || "USD").slice(0, 4);
       save(); render(); toast("Settings saved.");
     }
+    if (e.target.id === "printBtn") window.print();
     if (e.target.id === "exportBtn") download(JSON.stringify(state, null, 2), `finance-admin-${today()}.json`, "application/json");
     if (e.target.id === "importBtn") $("importFile").click();
     if (e.target.id === "resetBtn" && confirm("Erase ALL data in this browser? Export a backup first if you need it.")) { state = blank(); save(); render(); toast("All data erased."); }
@@ -766,6 +799,8 @@
     if (e.target.id === "strategy") { state.strategy = e.target.value; save(); render(); return; }
     if (e.target.id === "horizon") { state.horizon = num(e.target.value); save(); render(); return; }
     if (e.target.id === "savGoal") { state.savingsGoal = Math.max(0, num(e.target.value)); save(); render(); return; }
+    if (e.target.id === "savGoalName") { state.savingsGoalName = e.target.value.trim().slice(0, 80); save(); render(); return; }
+    if (e.target.id === "savTarget") { state.savingsTarget = Math.max(0, num(e.target.value)); save(); render(); return; }
     if (e.target.id !== "importFile") return;
     const file = e.target.files[0]; if (!file) return;
     try {
@@ -773,7 +808,7 @@
       if (!d || typeof d !== "object" || Array.isArray(d)) throw new Error("File must be a saved export.");
       if (!confirm("Replace all current data with this file?")) return;
       state = { ...blank(), ...d };
-      for (const k of ["debts","obligations","budget","payments","lent","repayments"]) if (!Array.isArray(state[k])) state[k] = [];
+      for (const k of ["debts","obligations","budget","payments","lent","repayments","incomes"]) if (!Array.isArray(state[k])) state[k] = [];
       state.debts.forEach((x) => { if (x.original === undefined) x.original = num(x.owed); });
       save(); render(); toast("Imported.");
     } catch (err) { alert("Import failed: " + err.message); }
